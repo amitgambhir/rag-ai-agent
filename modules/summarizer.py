@@ -1,7 +1,7 @@
 # summarizer module
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import HumanMessage
 
+# New recommended import:
+from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(temperature=0.3)
 
 def summarize_text(text, max_length=300):
