@@ -1,4 +1,3 @@
-# Streamlit app with authentication
 import streamlit as st
 from modules.rag_qa import RAGQA
 from dotenv import load_dotenv
@@ -11,8 +10,12 @@ PASSWORD = os.getenv("STREAMLIT_AUTH_PASSWORD", "password")
 
 def check_password():
     def password_entered():
-        if st.session_state["username"] == USERNAME and st.session_state["password"] == PASSWORD:
+        if (
+            st.session_state.get("username") == USERNAME and
+            st.session_state.get("password") == PASSWORD
+        ):
             st.session_state["authenticated"] = True
+            # Clear password from session state
             del st.session_state["password"]
         else:
             st.error("Invalid username or password")
@@ -26,6 +29,12 @@ def check_password():
         st.text_input("Password", type="password", key="password", on_change=password_entered)
         return False
     else:
+        # Show logout button
+        if st.button("Logout"):
+            for key in ["authenticated", "username"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.experimental_rerun()
         return True
 
 def main():

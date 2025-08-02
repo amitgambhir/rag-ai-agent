@@ -17,3 +17,4 @@ EXPOSE 8501
 
 # Run Streamlit app with no browser open and appropriate port
 CMD ["streamlit", "run", "ui/streamlit_app.py", "--server.port=8501", "--server.enableCORS=false"]
+

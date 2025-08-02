@@ -1,24 +1,29 @@
 # summarizer module
 
-# New recommended import:
 from langchain_openai import ChatOpenAI
-llm = ChatOpenAI(temperature=0.3)
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 
-def summarize_text(text, max_length=300):
-    """
-    Summarize the input text into a concise form.
-    """
-    prompt = (
-        f"Please provide a concise summary (under {max_length} words) of the following text:\n\n{text}"
-    )
-    messages = [HumanMessage(content=prompt)]
-    summary = llm(messages).content
-    return summary
+llm = ChatOpenAI(temperature=0.3, model_name="gpt-4")  # Or use gpt-3.5-turbo for cost efficiency
+
+template = """
+You are an expert summarizer.
+
+Summarize the following text briefly and clearly:
+
+{text}
+"""
+
+prompt = PromptTemplate(
+    input_variables=["text"],
+    template=template,
+)
+
+summarize_chain = LLMChain(llm=llm, prompt=prompt)
+
+def summarize_text(text: str) -> str:
+    return summarize_chain.run(text)
 
 if __name__ == "__main__":
-    sample_text = (
-        "Artificial Intelligence (AI) has made tremendous progress in recent years, "
-        "transforming many industries including healthcare, finance, and transportation. "
-        "The ability of machines to learn and perform complex tasks continues to evolve rapidly."
-    )
-    print(summarize_text(sample_text))
+    sample_text = "LangChain enables building powerful LLM-powered applications..."
+    print("Summary:", summarize_text(sample_text))

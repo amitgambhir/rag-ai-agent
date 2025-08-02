@@ -1,35 +1,51 @@
-# RAG QA module
-from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
-from langchain_openai import ChatOpenAI
+from langchain_community.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.chains import RetrievalQA
-from dotenv import load_dotenv
+from langchain.prompts import PromptTemplate
 
-load_dotenv()
+PERSIST_DIRECTORY = "vectorstore"
 
-VECTOR_DB_DIR = "data/vector_store"
+def load_vectorstore():
+    embeddings = OpenAIEmbeddings()
+    return Chroma(
+        persist_directory=PERSIST_DIRECTORY,
+        embedding_function=embeddings
+    )
 
-class RAGQA:
-    def __init__(self):
-        self.embeddings = OpenAIEmbeddings()
-        self.vectordb = Chroma(persist_directory=VECTOR_DB_DIR, embedding_function=self.embeddings)
-        self.llm = ChatOpenAI(temperature=0)
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=self.llm,
-            chain_type="stuff",
-            retriever=self.vectordb.as_retriever(search_kwargs={"k": 3}),
-            return_source_documents=True,
-        )
+def create_qa_chain():
+    vectordb = load_vectorstore()
+    retriever = vectordb.as_retriever(search_kwargs={"k": 5})
 
-    def query(self, question):
-        result = self.qa_chain({"query": question})
-        answer = result["result"]
-        sources = [doc.metadata.get("source", "unknown") for doc in result["source_documents"]]
-        return answer, sources
+    prompt_template = PromptTemplate(
+        input_variables=["context", "question"],
+        template="""
+You are an intelligent assistant helping answer questions based on provided context.
+
+Context: {context}
+
+Question: {question}
+
+Answer concisely and accurately. If the context does not contain the answer, say "I don't know".
+        """
+    )
+
+    llm = ChatOpenAI(temperature=0, model_name="gpt-4")  # You can change this to gpt-3.5-turbo if needed
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=retriever,
+        chain_type_kwargs={"prompt": prompt_template}
+    )
+    return qa_chain
+
+def answer_question(question: str):
+    qa_chain = create_qa_chain()
+    return qa_chain.run(question)
 
 if __name__ == "__main__":
-    rag_qa = RAGQA()
-    question = "What is artificial intelligence?"
-    answer, sources = rag_qa.query(question)
-    print(f"Answer:\n{answer}\n")
-    print(f"Sources:\n{sources}")
+    while True:
+        question = input("Ask a question (or 'exit' to quit): ")
+        if question.lower() == "exit":
+            break
+        answer = answer_question(question)
+        print("Answer:", answer)

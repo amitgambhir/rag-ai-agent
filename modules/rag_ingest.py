@@ -1,67 +1,51 @@
-# RAG ingestion script
-import os
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredURLLoader
 from langchain_community.text_splitter import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
+from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
-from dotenv import load_dotenv
+from langchain.docstore.document import Document
+import os
+import glob
 
-
-
-load_dotenv()
-
-# Paths & settings
-DOCUMENTS_DIR = "documents"
-VECTOR_DB_DIR = "data/vector_store"
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 100
+DATA_PATH = "documents"
+PERSIST_DIRECTORY = "vectorstore"
 
 def ingest_pdfs():
-    pdf_files = [f for f in os.listdir(DOCUMENTS_DIR) if f.endswith(".pdf")]
-    docs = []
-    for pdf in pdf_files:
-        loader = PyPDFLoader(os.path.join(DOCUMENTS_DIR, pdf))
-        pages = loader.load()
-        docs.extend(pages)
-    return docs
+    documents = []
+    for filepath in glob.glob(os.path.join(DATA_PATH, "*.pdf")):
+        loader = PyPDFLoader(filepath)
+        docs = loader.load()
+        documents.extend(docs)
+    return documents
 
 def ingest_urls():
-    urls_file = os.path.join(DOCUMENTS_DIR, "urls.txt")
+    urls_file = os.path.join(DATA_PATH, "urls.txt")
     if not os.path.exists(urls_file):
         return []
+
     with open(urls_file, "r") as f:
-        urls = [line.strip() for line in f.readlines() if line.strip()]
-    if not urls:
-        return []
+        urls = [line.strip() for line in f if line.strip()]
     loader = UnstructuredURLLoader(urls=urls)
-    docs = loader.load()
-    return docs
+    return loader.load()
 
 def ingest_documents():
     print("Starting ingestion of PDFs and URLs...")
+
     pdf_docs = ingest_pdfs()
     url_docs = ingest_urls()
+
     all_docs = pdf_docs + url_docs
-
-    if not all_docs:
-        print("No documents found to ingest.")
-        return
-
     print(f"Ingesting {len(all_docs)} documents...")
 
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
-    )
-    split_docs = text_splitter.split_documents(all_docs)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    split_docs = splitter.split_documents(all_docs)
 
     embeddings = OpenAIEmbeddings()
-    vectordb = Chroma(
-        persist_directory=VECTOR_DB_DIR,
-        embedding_function=embeddings
+    vectordb = Chroma.from_documents(
+        documents=split_docs,
+        embedding=embeddings,
+        persist_directory=PERSIST_DIRECTORY,
     )
-    vectordb.add_documents(split_docs)
     vectordb.persist()
-
     print("Ingestion complete and vector store persisted.")
 
 if __name__ == "__main__":
