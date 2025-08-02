@@ -3,6 +3,9 @@ import os
 from dotenv import load_dotenv
 from modules import planner, rag_qa, calculator, web_search, summarizer, memory
 from langchain.schema import Document
+from context import AgentContext
+context = AgentContext()
+context.add_chat("user", "Show me coverage details.")
 
 load_dotenv()
 

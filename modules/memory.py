@@ -1,6 +1,7 @@
 # memory management
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
+from langchain_openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
