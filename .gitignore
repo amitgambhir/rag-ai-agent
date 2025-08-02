@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+*.env
+
+# VS Code
+.vscode/
+
+# Data folders
+data/
+documents/
+
+# Logs and runtime files
+*.log
+*.sqlite3
+
+# Docker files (optional, if you want to exclude)
+# Dockerfile
+# docker-compose.yml
