@@ -1,10 +1,17 @@
+# modules/rag_ingest.py
+
+import os
+import glob
+from dotenv import load_dotenv
+
+# Load environment variables from .env early
+load_dotenv()
+
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredURLLoader
-from langchain_community.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain.docstore.document import Document
-import os
-import glob
 
 DATA_PATH = "documents"
 PERSIST_DIRECTORY = "vectorstore"
@@ -12,6 +19,7 @@ PERSIST_DIRECTORY = "vectorstore"
 def ingest_pdfs():
     documents = []
     for filepath in glob.glob(os.path.join(DATA_PATH, "*.pdf")):
+        print(f"Loading PDF: {filepath}")
         loader = PyPDFLoader(filepath)
         docs = loader.load()
         documents.extend(docs)
@@ -20,21 +28,36 @@ def ingest_pdfs():
 def ingest_urls():
     urls_file = os.path.join(DATA_PATH, "urls.txt")
     if not os.path.exists(urls_file):
+        print(f"No URLs file found at {urls_file}. Skipping URL ingestion.")
         return []
 
     with open(urls_file, "r") as f:
         urls = [line.strip() for line in f if line.strip()]
+    if not urls:
+        print("URLs file is empty. Skipping URL ingestion.")
+        return []
+
+    print(f"Loading URLs: {urls}")
     loader = UnstructuredURLLoader(urls=urls)
     return loader.load()
 
 def ingest_documents():
     print("Starting ingestion of PDFs and URLs...")
 
+    # Confirm API key is present
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise EnvironmentError("OPENAI_API_KEY not set in environment variables.")
+
     pdf_docs = ingest_pdfs()
     url_docs = ingest_urls()
 
     all_docs = pdf_docs + url_docs
     print(f"Ingesting {len(all_docs)} documents...")
+
+    if not all_docs:
+        print("No documents found to ingest. Exiting.")
+        return
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     split_docs = splitter.split_documents(all_docs)
