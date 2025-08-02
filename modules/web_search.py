@@ -1,19 +1,15 @@
 # web search module
 import requests
 from duckduckgo_search import ddg
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import HumanMessage
+from . import summarizer
 
-# Initialize OpenAI Chat model (adjust temperature as needed)
-llm = ChatOpenAI(temperature=0.3)
-
-def search_and_summarize(query, max_results=3):
-    """
-    Search DuckDuckGo for the query and summarize top results.
-    """
-    results = ddg(query, max_results=max_results)
+def search_and_summarize(query):
+    results = ddg(query, max_results=5)
     if not results:
         return "No results found."
+    combined_text = " ".join([item["body"] for item in results])
+    return summarizer.summarize_text(combined_text)
+
 
     combined_text = ""
     for idx, res in enumerate(results):
