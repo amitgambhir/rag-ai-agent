@@ -35,7 +35,7 @@ Answer:
         self.qa_chain = RetrievalQA.from_chain_type(
             llm=ChatOpenAI(temperature=0),
             chain_type="stuff",
-            retriever=vectordb.as_retriever(search_kwargs={"k": 4}),
+            retriever=vectordb.as_retriever(search_kwargs={"k": 10}),
             return_source_documents=True,
             chain_type_kwargs={"prompt": prompt_template},
         )
