@@ -1,0 +1,9 @@
+langchain
+openai
+faiss-cpu
+chromadb
+python-dotenv
+pypdf
+duckduckgo-search
+streamlit
+watchdog
