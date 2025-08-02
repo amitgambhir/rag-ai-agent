@@ -1,0 +1,63 @@
+# 
+    1. Start Fresh — Clean Environment
+
+    Ensure your virtual environment is activated:
+    source venv/bin/activate  # macOS/Linux
+    # or
+
+    .\venv\Scripts\activate   # Windows PowerShell
+
+    Make sure all dependencies are installed:
+    pip install -r requirements.txt
+
+    2. Environment Variables
+
+    Confirm .env file has your keys and credentials:
+
+    OPENAI_API_KEY=your_openai_key_here
+    STREAMLIT_AUTH_USERNAME=admin
+    STREAMLIT_AUTH_PASSWORD=your_password_here
+
+    Verify .env is loaded by your app (load_dotenv()).
+
+    3. Ingest Your Documents (PDFs / URLs)
+
+    Run ingestion script to load your source documents into vector store:
+    python modules/rag_ingest.py
+
+    Confirm ingestion logs print “Ingestion complete and vector store persisted.”
+
+    4. Run the Streamlit App
+
+    Start your Streamlit app with:
+    streamlit run ui/streamlit_app.py
+
+
+    Or if your main Streamlit file is different (e.g., main.py), use that instead.
+
+    5. Demo Flow Inside Streamlit UI
+
+    Login:
+    Enter username and password from .env.
+    Confirm login success or error on invalid creds.
+    Ask Questions:
+    Input natural language questions related to your ingested documents.
+    Watch the “Thinking…” spinner and then see the answer + sources displayed.
+
+    Logout:
+    Click the Logout button.
+
+    Confirm you’re back to login screen, ready for next user/demo.
+
+    6. Test Edge Cases
+    Try a math expression (if calculator module is integrated).
+    Try a search query (if web search module is active).
+    Ask about a topic not covered in your documents — see how it responds.
+    Try invalid login creds and observe error handling.
+
+    7. Wrap Up
+    Stop the app with Ctrl+C.
+    Optionally, demo Docker containerized run if you set it up:
+    docker build -t ai-agent-mcp .
+    docker run -p 8501:8501 ai-agent-mcp
+    Share feedback on flow, latency, or features you want improved next.

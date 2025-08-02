@@ -1,51 +1,62 @@
 from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.chains import RetrievalQA
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.prompts import PromptTemplate
+from langchain.schema import Document
+import os
 
 PERSIST_DIRECTORY = "vectorstore"
 
-def load_vectorstore():
-    embeddings = OpenAIEmbeddings()
-    return Chroma(
-        persist_directory=PERSIST_DIRECTORY,
-        embedding_function=embeddings
-    )
+class RAGQA:
+    def __init__(self):
+        # Initialize the vector store using persisted data
+        embeddings = OpenAIEmbeddings()
+        vectordb = Chroma(
+            persist_directory=PERSIST_DIRECTORY,
+            embedding_function=embeddings,
+        )
 
-def create_qa_chain():
-    vectordb = load_vectorstore()
-    retriever = vectordb.as_retriever(search_kwargs={"k": 5})
+        # Define a prompt template (optional, can be customized later)
+        prompt_template = PromptTemplate(
+            input_variables=["context", "question"],
+            template="""
+You are an intelligent assistant helping users with answers based on the provided context.
+Context:
+{context}
 
-    prompt_template = PromptTemplate(
-        input_variables=["context", "question"],
-        template="""
-You are an intelligent assistant helping answer questions based on provided context.
+Question:
+{question}
 
-Context: {context}
+Answer:
+""",
+        )
 
-Question: {question}
+        # Create retriever chain
+        self.qa_chain = RetrievalQA.from_chain_type(
+            llm=ChatOpenAI(temperature=0),
+            chain_type="stuff",
+            retriever=vectordb.as_retriever(search_kwargs={"k": 4}),
+            return_source_documents=True,
+            chain_type_kwargs={"prompt": prompt_template},
+        )
 
-Answer concisely and accurately. If the context does not contain the answer, say "I don't know".
-        """
-    )
-
-    llm = ChatOpenAI(temperature=0, model_name="gpt-4")  # You can change this to gpt-3.5-turbo if needed
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever,
-        chain_type_kwargs={"prompt": prompt_template}
-    )
-    return qa_chain
-
-def answer_question(question: str):
-    qa_chain = create_qa_chain()
-    return qa_chain.run(question)
-
-if __name__ == "__main__":
-    while True:
-        question = input("Ask a question (or 'exit' to quit): ")
-        if question.lower() == "exit":
-            break
-        answer = answer_question(question)
-        print("Answer:", answer)
+    def query(self, question):
+        result = self.qa_chain(question)
+        answer = result["result"]
+        sources = [doc.metadata.get("source", "Unknown") for doc in result["source_documents"]]
+        return answer, sources
+    
+    def reload_vectorstore():
+    """Re-run the ingestion pipeline to refresh the vector DB."""
+    try:
+        result = subprocess.run(
+            ["python", "modules/rag_ingest.py"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print("Vector DB reloaded successfully:\n", result.stdout)
+        return True, result.stdout
+    except subprocess.CalledProcessError as e:
+        print("Error reloading vector DB:\n", e.stderr)
+        return False, e.stderr

@@ -1,7 +1,9 @@
-import streamlit as st
-from modules.rag_qa import RAGQA
-from dotenv import load_dotenv
+import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import streamlit as st
+from modules.rag_qa import RAGQA, reload_vectorstore
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -44,6 +46,18 @@ def main():
         return
 
     rag = RAGQA()
+
+    st.markdown("---")
+    if st.button("🔄 Refresh Vector Store (Ingest Documents)"):
+    with st.spinner("Re-ingesting documents..."):
+        success, message = reload_vectorstore()
+        if success:
+            st.success("Vector store refreshed successfully.")
+        else:
+            st.error("Failed to refresh vector store.")
+            st.text(message)
+    st.markdown("---")
+
 
     query = st.text_input("Ask me anything related to your documents:")
 
