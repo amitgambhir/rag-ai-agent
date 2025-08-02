@@ -1,9 +1,9 @@
+import subprocess
+import os
 from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.prompts import PromptTemplate
-from langchain.schema import Document
-import os
 
 PERSIST_DIRECTORY = "vectorstore"
 
@@ -45,8 +45,8 @@ Answer:
         answer = result["result"]
         sources = [doc.metadata.get("source", "Unknown") for doc in result["source_documents"]]
         return answer, sources
-    
-    def reload_vectorstore():
+
+def reload_vectorstore():
     """Re-run the ingestion pipeline to refresh the vector DB."""
     try:
         result = subprocess.run(

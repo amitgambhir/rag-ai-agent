@@ -48,16 +48,16 @@ def main():
     rag = RAGQA()
 
     st.markdown("---")
+    
     if st.button("🔄 Refresh Vector Store (Ingest Documents)"):
-    with st.spinner("Re-ingesting documents..."):
-        success, message = reload_vectorstore()
-        if success:
-            st.success("Vector store refreshed successfully.")
-        else:
-            st.error("Failed to refresh vector store.")
-            st.text(message)
+        with st.spinner("Re-ingesting documents..."):
+            success, message = reload_vectorstore()
+            if success:
+                st.success("Vector store refreshed successfully.")
+            else:
+                st.error("Failed to refresh vector store.")
+                st.text(message)
     st.markdown("---")
-
 
     query = st.text_input("Ask me anything related to your documents:")
 
