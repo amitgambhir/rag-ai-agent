@@ -18,7 +18,7 @@ class MemoryManager:
         self.vectordb.add_documents(documents)
         self.vectordb.persist()
 
-    def query_memory(self, query, k=5):
+    def query_memory(self, query, k=10):
         retriever = self.vectordb.as_retriever(search_kwargs={"k": k})
         results = retriever.get_relevant_documents(query)
         return results
