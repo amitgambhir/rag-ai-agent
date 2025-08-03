@@ -16,11 +16,17 @@ class RAGQA:
             embedding_function=embeddings,
         )
 
-        # Define a prompt template (optional, can be customized later)
+        # Strict prompt: Don't answer if context is insufficient
         prompt_template = PromptTemplate(
             input_variables=["context", "question"],
             template="""
-You are an intelligent assistant helping users with answers based on the provided context.
+You are an intelligent assistant helping users strictly based on the provided context below.
+
+If the context does not contain enough information to answer the question, clearly respond:
+"I’m sorry, but I can’t find enough information in the available documents to answer that."
+
+Do not use any external or prior knowledge.
+
 Context:
 {context}
 
@@ -31,7 +37,7 @@ Answer:
 """,
         )
 
-        # Create retriever chain
+        # Create the retrieval-based QA chain
         self.qa_chain = RetrievalQA.from_chain_type(
             llm=ChatOpenAI(temperature=0),
             chain_type="stuff",
