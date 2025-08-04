@@ -53,7 +53,7 @@ Answer:
         return answer, sources
 
 def reload_vectorstore():
-    """Re-run the ingestion pipeline to refresh the vector DB."""
+    """Re-run the ingestion pipeline to refresh the vector DB and reload in memory."""
     try:
         result = subprocess.run(
             ["python", "modules/rag_ingest.py"],
@@ -62,7 +62,16 @@ def reload_vectorstore():
             check=True
         )
         print("Vector DB reloaded successfully:\n", result.stdout)
-        return True, result.stdout
+
+        # Count number of documents reloaded
+        embeddings = OpenAIEmbeddings()
+        vectordb = Chroma(
+            persist_directory=PERSIST_DIRECTORY,
+            embedding_function=embeddings,
+        )
+        doc_count = vectordb._collection.count()
+
+        return True, f"{result.stdout}\n\nTotal documents loaded: {doc_count}"
     except subprocess.CalledProcessError as e:
         print("Error reloading vector DB:\n", e.stderr)
         return False, e.stderr

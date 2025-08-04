@@ -1,71 +1,72 @@
-import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import sys
 import streamlit as st
-from modules.rag_qa import RAGQA, reload_vectorstore
 from dotenv import load_dotenv
+# Add root of project to sys.path so 'modules' can be found
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from modules.rag_qa import RAGQA, reload_vectorstore
 
 load_dotenv()
 
-USERNAME = os.getenv("STREAMLIT_AUTH_USERNAME", "admin")
-PASSWORD = os.getenv("STREAMLIT_AUTH_PASSWORD", "password")
+# Set page config
+st.set_page_config(page_title="AI Agent MCP", layout="wide")
+st.title("🤖 AI Agent MCP")
 
-def check_password():
-    def password_entered():
-        if (
-            st.session_state.get("username") == USERNAME and
-            st.session_state.get("password") == PASSWORD
-        ):
-            st.session_state["authenticated"] = True
-            # Clear password from session state
-            del st.session_state["password"]
-        else:
-            st.error("Invalid username or password")
+# Basic Auth using Streamlit secrets or .env
+APP_USERNAME = os.getenv("APP_USERNAME")
+APP_PASSWORD = os.getenv("APP_PASSWORD")
 
-    if "authenticated" not in st.session_state:
-        st.text_input("Username", key="username")
-        st.text_input("Password", type="password", key="password", on_change=password_entered)
-        return False
-    elif not st.session_state["authenticated"]:
-        st.text_input("Username", key="username")
-        st.text_input("Password", type="password", key="password", on_change=password_entered)
-        return False
-    else:
-        # Show logout button
-        if st.button("Logout"):
-            for key in ["authenticated", "username"]:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.experimental_rerun()
-        return True
-
-def main():
-    st.title("AI Agent MCP Chat")
-
-    if not check_password():
-        return
-
-    rag = RAGQA()
-
-    st.markdown("---")
-    
-    if st.button("🔄 Refresh Vector Store (Ingest Documents)"):
-        with st.spinner("Re-ingesting documents..."):
-            success, message = reload_vectorstore()
-            if success:
-                st.success("Vector store refreshed successfully.")
+def login():
+    st.session_state.logged_in = False
+    with st.form("Login"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Login")
+        if submit:
+            if username == APP_USERNAME and password == APP_PASSWORD:
+                st.session_state.logged_in = True
             else:
-                st.error("Failed to refresh vector store.")
-                st.text(message)
-    st.markdown("---")
+                st.error("Invalid credentials")
 
-    query = st.text_input("Ask me anything related to your documents:")
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    login()
+    st.stop()
 
-    if query:
-        with st.spinner("Thinking..."):
-            answer, sources = rag.query(query)
-        st.markdown(f"**Answer:** {answer}")
-        st.markdown(f"**Sources:** {', '.join(sources)}")
+# App logic
+rag_qa = RAGQA()
 
-if __name__ == "__main__":
-    main()
+st.sidebar.header("📂 Vector Store Controls")
+
+# Button to refresh vector DB
+if st.sidebar.button("🔁 Refresh Vector Store"):
+    with st.spinner("Refreshing vector store..."):
+        success, log = reload_vectorstore()
+        if success:
+            st.sidebar.success("Vector store refreshed!")
+        else:
+            st.sidebar.error("Failed to refresh vector store.")
+            st.sidebar.text_area("Error log", log)
+
+st.markdown("Ask a question based on your ingested documents and URLs.")
+
+user_input = st.text_input("Your Question")
+
+if user_input:
+    with st.spinner("Thinking..."):
+        answer, sources = rag_qa.query(user_input)
+
+        # Step 2: Check if the answer came from a meaningful source
+        if not sources or "source" not in str(sources).lower():
+            st.warning("⚠️ No relevant context was found in your documents or URLs.")
+            st.info("Try adding more relevant files or URLs, or reloading the vector store.")
+        else:
+            # Step 3: Show the actual result
+            st.subheader("Answer")
+            st.write(answer)
+
+            st.subheader("Sources")
+            for src in sources:
+                st.markdown(f"- `{src}`")
+
+st.markdown("---")
+st.markdown("© AI Agent MCP – Powered by LangChain, Chroma, OpenAI, and Streamlit.")
