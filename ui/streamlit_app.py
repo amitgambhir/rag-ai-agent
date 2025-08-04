@@ -2,11 +2,25 @@ import os
 import sys
 import streamlit as st
 from dotenv import load_dotenv
+
 # Add root of project to sys.path so 'modules' can be found
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from modules.rag_qa import RAGQA, reload_vectorstore
 
-load_dotenv()
+# Load environment variables
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
+
+
+# Fetch credentials from .env
+APP_USERNAME = os.getenv("APP_USERNAME")
+APP_PASSWORD = os.getenv("APP_PASSWORD")
+
+# Debug: Show missing envs
+if APP_USERNAME is None or APP_PASSWORD is None:
+    st.error("⚠️ Environment variables APP_USERNAME or APP_PASSWORD are not loaded.")
+    st.stop()
 
 # Set page config
 st.set_page_config(page_title="AI Agent MCP", layout="wide")
@@ -16,6 +30,7 @@ st.title("🤖 AI Agent MCP")
 APP_USERNAME = os.getenv("APP_USERNAME")
 APP_PASSWORD = os.getenv("APP_PASSWORD")
 
+# Basic login form
 def login():
     st.session_state.logged_in = False
     with st.form("Login"):
@@ -25,9 +40,11 @@ def login():
         if submit:
             if username == APP_USERNAME and password == APP_PASSWORD:
                 st.session_state.logged_in = True
+                st.success("✅ Logged in successfully.")
             else:
-                st.error("Invalid credentials")
+                st.error("❌ Invalid credentials. Please try again.")
 
+# Login check
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     login()
     st.stop()
@@ -35,6 +52,7 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 # App logic
 rag_qa = RAGQA()
 
+# Sidebar controls
 st.sidebar.header("📂 Vector Store Controls")
 
 # Button to refresh vector DB
