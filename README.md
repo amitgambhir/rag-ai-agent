@@ -1,5 +1,5 @@
+**Modular Conversational AI**: RAG + Planning + Summarization + Memory + Streamlit UI.
 AI Agent MCP is a **modular, self-hosted AI assistant** that leverages **Retrieval-Augmented Generation (RAG)** to answer questions using both **PDF documents** and **web content (URLs)**. It uses LangChain, Chroma, OpenAI models, and Streamlit to deliver context-aware answers with source traceability — making it ideal for knowledge workers, internal search, or enterprise AI assistants.
-
 ---
 
 ## 🚀 Features
@@ -22,7 +22,11 @@ AI Agent MCP is a **modular, self-hosted AI assistant** that leverages **Retriev
 👉📄 urls.txt               # List of URLs to ingest
 📂 modules/
 👉📄 rag_ingest.py          # Document/URL loader & vector store builder
+👉📄 summarizer.py          # summarize the answers
+👉📄 memory.py              # manage the memory
+👉📄 planner.py             # plan and orchestrate the steps
 👉📄 rag_qa.py              # RAG pipeline for answering queries
+👉📄 fallback.py            # fallback to LLM/OpenAI for search when answers not found in RAG
 📂 ui/
 👉📄 streamlit_app.py       # Streamlit frontend app
 📂 vectorstore/               # Persisted Chroma vector store
@@ -57,6 +61,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 ### 4. Install Dependencies
 ```bash
 pip install -r requirements.txt
+playwright install
 ```
 
 ### 5. Ingest PDF or Web Content
@@ -69,13 +74,7 @@ pip install -r requirements.txt
 python modules/rag_ingest.py
 ```
 
-### 7. (Optional) Run Real-Time PDF Watcher
-```bash
-python modules/pdf_watcher.py
-```
-This will watch the `documents/` folder and automatically re-ingest new PDFs as they are added.
-
-### 8. Run the Agent CLI
+### 7. Run the Agent CLI
 ```bash
 python main.py
 ```
@@ -85,16 +84,6 @@ python main.py
    ```
 On launch, you'll be prompted for your configured username/password.
 
-
----
-
-## 🐳 Run Using Docker
-### Build and start with Docker Compose:
-```bash
-docker-compose up --build
-```
-
-This will spin up the full stack with a web UI at `http://localhost:8501`
 
 ---
 
@@ -110,27 +99,17 @@ This will spin up the full stack with a web UI at `http://localhost:8501`
 
 ## 💡 Current Limitations
 
-- Web ingestion works best with static pages (no login required, minimal JavaScript).
-- No auto-refresh of vector DB (must click "Refresh" or rerun pipeline).
-- No memory or chat history yet — answers are stateless.
-- Only supports PDFs and URLs for now — Word, TXT, and emails are not yet supported.
+
 
 ---
 
 ## 🌱 Planned Enhancements
 
-- 🔁 Auto-ingestion when files/URLs change
 - 🧠 Multi-step reasoning via LangGraph or function-calling agents
 - 📃 Upload support from UI
-- 🗒️ Chat history + feedback
-- 📊 Analytics dashboard for queries
-- ✅ CI/CD integration and test coverage
 
 ---
 
-## 📄 License
-
-MIT License. Feel free to fork, extend, and contribute.
 
 ---
 
@@ -145,5 +124,3 @@ MIT License. Feel free to fork, extend, and contribute.
 
 ## ✍️ Maintained By
 
-**Amit Gambhir**\
-Feel free to reach out or open issues/PRs for enhancements or bug fixes.
