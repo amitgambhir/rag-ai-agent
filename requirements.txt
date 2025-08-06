@@ -9,3 +9,11 @@ pypdf
 duckduckgo-search
 streamlit
 watchdog
+langchain>=0.1.0
+tiktoken
+playwright
+unstructured
+beautifulsoup4
+pdfminer.six
+langchain==0.2.0
+langchain-community==0.2.0

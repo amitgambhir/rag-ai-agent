@@ -1,24 +1,23 @@
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
+from langchain.memory import ConversationBufferMemory
+from langchain_openai import ChatOpenAI
 
-VECTOR_DB_DIR = "memory_db"
+class ChatMemory:
+    """
+    Wrapper around LangChain's ConversationBufferMemory.
+    Stores chat history for conversation context.
+    """
 
-class MemoryManager:
     def __init__(self):
-        self.embeddings = OpenAIEmbeddings()
-        self.vectordb = Chroma(
-            persist_directory=VECTOR_DB_DIR,
-            embedding_function=self.embeddings
-        )
+        self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-    def add_memory(self, documents):
-        """
-        documents: list of langchain.schema.Document
-        """
-        self.vectordb.add_documents(documents)
-        self.vectordb.persist()
+    def add_user_message(self, message: str):
+        self.memory.chat_memory.add_user_message(message)
 
-    def query_memory(self, query, k=10):
-        retriever = self.vectordb.as_retriever(search_kwargs={"k": k})
-        results = retriever.get_relevant_documents(query)
-        return results
+    def add_ai_message(self, message: str):
+        self.memory.chat_memory.add_ai_message(message)
+
+    def get_memory(self):
+        return self.memory
+
+    def clear(self):
+        self.memory.clear()
