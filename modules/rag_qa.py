@@ -1,31 +1,34 @@
 import os
-
+from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.chains import RetrievalQA
-from langchain_community.document_loaders import WebBaseLoader, PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from dotenv import load_dotenv
+
 load_dotenv()
 
-PERSIST_DIR = "./vectorstore"
+# Paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PERSIST_DIR = os.path.join(BASE_DIR, "..", "vectorstore")
 
 class RAGQA:
     def __init__(self, force_reload=False, temperature=0.0, retriever_k=3):
         self.temperature = temperature
         self.retriever_k = retriever_k
-        self.embeddings = OpenAIEmbeddings()            # picks up OPENAI_API_KEY from env
+        self.embeddings = OpenAIEmbeddings()
         self.vectordb = None
         self.retriever = None
         self.qa = None
 
-        # build or load vectorstore
-        if force_reload or not os.path.exists(PERSIST_DIR):
-            self._build_vectorstore()
-        else:
-            self._load_vectorstore()
+        # Build or load vector DB
+        if force_reload:
+            from modules.rag_ingest import ingest_documents
+            ingest_documents()
 
-        # build QA chain
+        if os.path.exists(PERSIST_DIR):
+            self._load_vectorstore()
+        else:
+            raise FileNotFoundError(f"❌ Vector store not found at {PERSIST_DIR}. Please run ingestion first.")
+
         self._build_chain()
 
     def _load_vectorstore(self):
@@ -35,40 +38,13 @@ class RAGQA:
         )
         self.retriever = self.vectordb.as_retriever(search_kwargs={"k": self.retriever_k})
 
-    def _build_vectorstore(self):
-        documents = []
-
-        # Ingest from URLs
-        for url in URLS:
-            loader = WebBaseLoader(url)
-            documents.extend(loader.load())
-
-        # Ingest from PDFs
-        for pdf in PDFS:
-            loader = PyPDFLoader(pdf)
-            documents.extend(loader.load())
-
-        # Chunk documents
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-        docs_split = splitter.split_documents(documents)
-
-        # Create & persist vectorstore
-        vectordb = Chroma.from_documents(
-            docs_split,
-            embedding=self.embeddings,
-            persist_directory=PERSIST_DIR
-        )
-        vectordb.persist()
-
-        self.vectordb = vectordb
-        self.retriever = vectordb.as_retriever(search_kwargs={"k": self.retriever_k})
-
     def _build_chain(self):
         llm = ChatOpenAI(temperature=self.temperature, model_name="gpt-4")
         self.qa = RetrievalQA.from_chain_type(
             llm=llm,
             chain_type="stuff",
-            retriever=self.retriever
+            retriever=self.retriever,
+            return_source_documents=True
         )
 
     def update_model_settings(self, temperature=None, retriever_k=None):
@@ -76,27 +52,43 @@ class RAGQA:
             self.temperature = temperature
         if retriever_k is not None:
             self.retriever_k = retriever_k
-
-        # Update retriever top-k
         if self.vectordb:
             self.retriever = self.vectordb.as_retriever(search_kwargs={"k": self.retriever_k})
-
-        # Rebuild QA chain with new temperature
         self._build_chain()
 
-    def query(self, question: str):
-        docs = self.retriever.get_relevant_documents(question)
-        if not docs:
-            return "No relevant documents found.", []
-        result = self.qa.invoke({"query": question})
-        answer = result["result"].strip()
-        return answer, result.get("source_documents", docs)
+    def query(self, question: str) -> tuple[str, list]:
+        if not question:
+            return "", []
 
+        try:
+            result = self.qa.invoke({"query": question})
+        except Exception as e:
+            return f"[RAG Query Error: {e}]", []
+
+        # Parse result safely
+        answer = ""
+        sources = []
+
+        if isinstance(result, dict):
+            answer = result.get("result", "")
+            sources = result.get("source_documents", [])
+        else:
+            answer = result or ""
+            sources = []
+
+        # Normalize edge cases
+        if callable(answer):
+            answer = "[Invalid result: received a function instead of a string]"
+
+        return str(answer).strip(), sources
+
+
+# For Streamlit UI
 def reload_vectorstore():
     try:
         import shutil
         if os.path.exists(PERSIST_DIR):
             shutil.rmtree(PERSIST_DIR)
-        return True, "Vector store directory cleared. Will reload on next query."
+        return True, "Vector store directory cleared."
     except Exception as e:
         return False, str(e)

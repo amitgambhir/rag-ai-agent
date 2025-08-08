@@ -1,19 +1,29 @@
+# LangChain ecosystem (unversioned for clean install)
 langchain
+langchain-core
 langchain-openai
 langchain-community
-openai
-faiss-cpu
+
+# Vector store
 chromadb
-python-dotenv
+
+# OpenAI
+openai
+
+# Document ingestion & parsing
 pypdf
-duckduckgo-search
-streamlit
-watchdog
-langchain>=0.1.0
-tiktoken
-playwright
+pdfminer.six
 unstructured
 beautifulsoup4
-pdfminer.six
-langchain==0.2.0
-langchain-community==0.2.0
+
+# Tokenizer
+tiktoken
+
+# UI & environment
+streamlit
+python-dotenv
+watchdog
+
+# Web loader
+playwright
+duckduckgo-search
