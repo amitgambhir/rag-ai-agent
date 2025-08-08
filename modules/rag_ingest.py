@@ -1,36 +1,41 @@
-import sys
 import os
 import logging
 import shutil
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 from langchain_community.document_loaders import PlaywrightURLLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from modules.rag_qa import PERSIST_DIR, OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from dotenv import load_dotenv
 
-# Load env vars
 load_dotenv()
 
-# Setup logging
+# ─── Constants ───
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOCS_DIR = os.path.join(BASE_DIR, "..", "documents")
+URL_FILE = os.path.join(DOCS_DIR, "urls.txt")
+PERSIST_DIR = os.path.join(BASE_DIR, "..", "vectorstore")
+
+# ─── Logging ───
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
+# ─── Loaders ───
 
 def load_urls(file_path):
+    if not os.path.exists(file_path):
+        return []
     with open(file_path, "r") as f:
         return [line.strip() for line in f.readlines() if line.strip()]
 
-
 def load_pdfs(directory):
+    if not os.path.exists(directory):
+        return []
     return [
         os.path.join(directory, f)
         for f in os.listdir(directory)
         if f.endswith(".pdf")
     ]
-
 
 def ingest_documents(force_reload=True):
     if force_reload and os.path.exists(PERSIST_DIR):
@@ -40,10 +45,9 @@ def ingest_documents(force_reload=True):
 
     log.info("📦 Starting ingestion pipeline...")
 
-    # Load web pages using Playwright
+    # Load URLs
     log.info("🔗 Loading web documents...")
-    url_file = os.path.join("documents", "urls.txt")
-    urls = load_urls(url_file)
+    urls = load_urls(URL_FILE)
     for url in urls:
         try:
             log.info(f"   → Fetching: {url}")
@@ -56,7 +60,7 @@ def ingest_documents(force_reload=True):
 
     # Load PDFs
     log.info("📄 Loading PDF documents...")
-    pdfs = load_pdfs("documents")
+    pdfs = load_pdfs(DOCS_DIR)
     for pdf in pdfs:
         try:
             log.info(f"   → Reading: {pdf}")
@@ -67,13 +71,17 @@ def ingest_documents(force_reload=True):
         except Exception as e:
             log.warning(f"     ❌ Error loading PDF {pdf}: {e}")
 
-    # Chunk documents
+    if not documents:
+        log.warning("⚠️ No documents found to ingest. Skipping vectorstore creation.")
+        return False
+
+    # Chunking
     log.info("✂️ Splitting documents into chunks...")
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     docs_split = splitter.split_documents(documents)
     log.info(f"   → Total chunks created: {len(docs_split)}")
 
-    # Build vectorstore
+    # Embedding
     log.info("🧠 Generating embeddings and building vectorstore...")
     embeddings = OpenAIEmbeddings()
     vectordb = Chroma.from_documents(
@@ -85,7 +93,6 @@ def ingest_documents(force_reload=True):
     log.info("✅ Ingestion completed successfully.")
 
     return True
-
 
 if __name__ == "__main__":
     ingest_documents()

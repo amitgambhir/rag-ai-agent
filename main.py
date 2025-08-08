@@ -1,15 +1,28 @@
-from modules.planner import Planner
-import sys
+#main.py
+
 import os
+import sys
 import time
 from dotenv import load_dotenv
+
 load_dotenv()
 
+# Add project root to Python path
+ROOT = os.path.abspath(os.path.dirname(__file__))
+if ROOT not in sys.path:
+    sys.path.append(ROOT)
+
+# Import project modules
+from modules.context import AgentContext
+from modules.planner import Planner
+from modules import rag_ingest, rag_qa, web_search
+from modules.rag_qa import RAGQA
 
 def main():
-    # Initialize shared context
+    # Initialize shared context and planner
     ctx = AgentContext()
     planner = Planner()
+    rag = RAGQA()
 
     print("🤖 AI Agent Initialized.")
 
@@ -18,9 +31,9 @@ def main():
     planner.add_task("query_documents")
     planner.add_task("web_search")
 
-    # Loop until all tasks done or user exits
+    # Loop until all tasks are done or user exits
     while True:
-        current_task = planner.next_task()
+        current_task = planner.get_next_task()
         if not current_task:
             print("All tasks completed or waiting for user input.")
             break
@@ -29,7 +42,7 @@ def main():
             print("\n📥 Ingesting documents...")
             rag_ingest.ingest_documents()
             ctx.set_task("document_ingestion_complete")
-            planner.complete_task("ingest_documents")
+            planner.mark_task_completed("ingest_documents")
 
         elif current_task == "query_documents":
             print("\n🗨️ Ask me a question (or type 'exit' to quit):")
@@ -43,18 +56,18 @@ def main():
 
             print("🔎 Searching ingested documents...")
             try:
-                response = rag_qa.query_ingested_docs(user_input)
-                if response:
-                    print(f"📄 Answer from documents:\n{response}\n")
-                    ctx.add_chat("agent", response)
+                answer, sources = rag.query(user_input)
+                if answer:
+                    print(f"📄 Answer from documents:\n{answer}\n")
+                    ctx.add_chat("agent", answer)
                 else:
                     print("No relevant document answer found.")
                     planner.add_task("web_search")
-                planner.complete_task("query_documents")
+                planner.mark_task_completed("query_documents")
             except Exception as e:
                 print(f"[Error during document query: {e}]")
                 planner.add_task("web_search")
-                planner.complete_task("query_documents")
+                planner.mark_task_completed("query_documents")
 
         elif current_task == "web_search":
             print("🌐 Searching the web...")
@@ -64,9 +77,9 @@ def main():
                 ctx.add_chat("agent", web_summary)
             except Exception as e:
                 print(f"[Error during web search: {e}]")
-            planner.complete_task("web_search")
+            planner.mark_task_completed("web_search")
 
-        # Pause or add other logic here if needed
-
-        # Optional: small delay to keep CLI responsive
         time.sleep(0.5)
+
+if __name__ == "__main__":
+    main()

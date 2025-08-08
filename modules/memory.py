@@ -1,4 +1,5 @@
 from langchain.memory import ConversationBufferMemory
+# If LangChain breaks this in future, change to langchain_core.memory
 from langchain_openai import ChatOpenAI
 
 class ChatMemory:
@@ -20,4 +21,4 @@ class ChatMemory:
         return self.memory
 
     def clear(self):
-        self.memory.clear()
+        self.memory.chat_memory.messages = []

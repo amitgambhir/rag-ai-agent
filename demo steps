@@ -10,6 +10,9 @@
     Make sure all dependencies are installed:
     pip install -r requirements.txt
 
+    # Then install Playwright browsers
+    playwright install
+    
     2. Environment Variables
 
     Confirm .env file has your keys and credentials:
@@ -61,3 +64,9 @@
     docker build -t ai-agent-mcp .
     docker run -p 8501:8501 ai-agent-mcp
     Share feedback on flow, latency, or features you want improved next.
+
+
+
+    Demo Workflow:
+    python demo_workflow.py
+    python demo_workflow.py --gpt-fallback
