@@ -25,22 +25,36 @@ Summary:
         self.chain = RunnableSequence(self.prompt, self.llm)
 
     def summarize(self, text: str, max_tokens: int = 300) -> str:
-        # Invoke the sequence
-        output = self.chain.invoke({"text": text, "max_tokens": max_tokens})
+        # Defensive normalization of input
+        if callable(text):
+            text = "[Internal error: received a function instead of text]"
+        elif not isinstance(text, str):
+            text = str(text)
 
-        # Normalize whether it's an AIMessage or list of them
+        try:
+            output = self.chain.invoke({"text": text, "max_tokens": max_tokens})
+        except Exception as e:
+            return f"[Summarizer Error: {e}]"
+
+        # Normalize outputs from LangChain
         if isinstance(output, AIMessage):
-            msg = output
-        elif isinstance(output, list) and output and isinstance(output[0], AIMessage):
-            msg = output[0]
-        else:
-            # Fallback: treat output as list of strings
-            msg = output[0] if isinstance(output, list) else output
+            content = getattr(output, "content", None)
+            if isinstance(content, str):
+                return content.strip()
+            return str(output).strip()
 
-        # Extract text attribute if available, else string-cast
-        return getattr(msg, "text", str(msg)).strip()
+        # Sometimes it returns a list with AIMessage
+        if isinstance(output, list) and output and isinstance(output[0], AIMessage):
+            content = getattr(output[0], "content", None)
+            if isinstance(content, str):
+                return content.strip()
+            return str(output[0]).strip()
+
+        # Fallback normalization
+        if callable(output):
+            return "[Summarizer Error: output was a function]"
+        return str(output).strip()
 
 # Convenience wrapper
 def summarize_text(text: str, response_length: int = 300) -> str:
-    summarizer = Summarizer()
-    return summarizer.summarize(text, max_tokens=response_length)
+    return Summarizer().summarize(text, max_tokens=response_length)

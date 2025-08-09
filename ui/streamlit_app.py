@@ -1,35 +1,41 @@
 import os
 import sys
+import time
+import gc
+import shutil
+import tempfile
 import streamlit as st
 from dotenv import load_dotenv
 
-# ─── Load environment ───
+# ─── Project root on sys.path ───
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+# ─── Load env ───
 load_dotenv(os.path.join(ROOT, ".env"))
 
-# ─── App Modules ───
+# ─── App modules ───
 from modules.rag_qa import RAGQA
 from modules.summarizer import Summarizer
 from modules.memory import ChatMemory
 from modules.planner import Planner
 from modules.fallback import fallback_answer
-from modules.rag_ingest import ingest_documents
-from modules import rag_ingest
+import modules.rag_ingest as rag_ingest
+from modules.config import PERSIST_DIR
 
-# ─── Auth Setup ───
+# ─── Auth ───
 USERNAME = os.getenv("APP_USERNAME")
 PASSWORD = os.getenv("APP_PASSWORD")
 if not USERNAME or not PASSWORD:
     st.error("⚠️ Missing APP_USERNAME or APP_PASSWORD in .env")
     st.stop()
 
-# ─── Streamlit Page Config ───
+# ─── Page config ───
 st.set_page_config(page_title="AI Agent MCP", layout="wide")
 st.title("🤖 AI Agent MCP")
 
-# ─── Session State Init ───
+# ─── Session state init ───
 if "auth" not in st.session_state:
     st.session_state.auth = False
 if "rag" not in st.session_state:
@@ -45,7 +51,7 @@ if "hist" not in st.session_state:
 if "use_gpt_fallback" not in st.session_state:
     st.session_state.use_gpt_fallback = False
 
-# ─── Login Form ───
+# ─── Login ───
 if not st.session_state.auth:
     st.subheader("🔐 Login")
     user = st.text_input("Username")
@@ -58,35 +64,30 @@ if not st.session_state.auth:
             st.error("❌ Invalid credentials")
     st.stop()
 
-# ─── Sidebar Tools ───
+# ─── Sidebar ───
 st.sidebar.header("Settings & Tools")
 
+# Refresh Vector Store (temp-dir build + atomic swap)
 if st.sidebar.button("🔁 Refresh Vector Store"):
     try:
-        import shutil
-        import gc
-        import time
-        from modules import rag_ingest
-        from modules.config import PERSIST_DIR
-
-        # Step 1: Manually remove RAG instance and trigger GC
+        # 1) Release current RAG/Chroma so SQLite files are unlocked
         st.session_state.rag = None
         gc.collect()
-        time.sleep(1)  # Wait for file handles to release
+        time.sleep(0.5)
 
-        # Step 2: Delete old vectorstore dir
+        # 2) Build in a temp directory first (avoids writing into a locked dir)
+        with st.spinner("♻️ Rebuilding vector store…"):
+            tmp_dir = tempfile.mkdtemp(prefix="vectorstore_")
+            rag_ingest.ingest_documents(force_reload=True, output_dir=tmp_dir)
+
+        # 3) Replace old store with new one
         if os.path.exists(PERSIST_DIR):
             shutil.rmtree(PERSIST_DIR)
-            time.sleep(1)  # Give filesystem time to unlock
+        shutil.move(tmp_dir, PERSIST_DIR)
 
-        # Step 3: Run ingestion pipeline (rebuild vectorstore)
-        with st.spinner("♻️ Rebuilding vector store…"):
-            rag_ingest.ingest_documents()
-
-        # Step 4: Reinitialize RAG module
+        # 4) Reload RAG
         st.session_state.rag = RAGQA(force_reload=True)
-        st.sidebar.success("✅ Vector store refreshed successfully")
-
+        st.sidebar.success("✅ Vector store refreshed and reloaded.")
     except Exception as e:
         st.sidebar.error(f"❌ Ingestion error: {e}")
 
@@ -106,44 +107,67 @@ length = st.slider("Summary Length (max tokens)", min_value=50, max_value=1000, 
 
 if query:
     try:
-        # 1️⃣ Plan
+        # 1) Plan (placeholder)
         steps = st.session_state.plan.plan(query)
         st.markdown("### 🔎 Plan")
         st.write(steps)
 
-        # 2️⃣ Add user message
+        # 2) Track user message
         st.session_state.mem.add_user_message(query)
         st.session_state.hist.append({"role": "user", "content": query})
 
-        # 3️⃣ RAG query
-        answer, sources = st.session_state.rag.query(query)
+        # 3) RAG
+        with st.spinner("🔎 Searching documents…"):
+            answer, sources = st.session_state.rag.query(query)
 
-        # 4️⃣ Fallback if no RAG result
-        if (not isinstance(answer, str) or not answer.strip()) and st.session_state.use_gpt_fallback:
+        # Debug (temporary): verify the type we’re about to summarize
+        # st.write(f"DEBUG: type(answer) = {type(answer)}")
+
+        # 4) Fallback (only if RAG result is empty/invalid *and* toggle is on)
+        need_fallback = (
+            not isinstance(answer, str)
+            or not answer.strip()
+            or not sources  # ← if RAG gave no source docs, treat as miss
+        )
+        if need_fallback and st.session_state.use_gpt_fallback:
             with st.spinner("💬 No RAG hit — asking ChatGPT…"):
-                fallback_response = fallback_answer(query)
-                if callable(fallback_response):
-                    answer = "[Invalid fallback result: function instead of string]"
+                fb = fallback_answer(query)  # MUST be called
+                # Normalize fallback result to string
+                if callable(fb):
+                    answer = "[Invalid fallback result: function]"
+                elif isinstance(fb, str):
+                    answer = fb
                 else:
-                    answer = str(fallback_response)
+                    answer = str(fb)
                 sources = [{"metadata": {"source": "💬 ChatGPT (fallback)"}}]
 
-        # 5️⃣ Summarize
+        # 5) Normalize answer BEFORE summarizing (prevents .strip() errors)
+        if callable(answer):
+            answer = "[Internal error: answer was a function]"
+        elif not isinstance(answer, str):
+            answer = str(answer)
+
+        # 6) Summarize
         summary = st.session_state.summ.summarize(answer, max_tokens=length)
 
-        # 6️⃣ Add AI message
+        # 7) Track AI response
         st.session_state.mem.add_ai_message(summary)
         st.session_state.hist.append({"role": "assistant", "content": summary})
 
-        # 7️⃣ Display
+        # 8) Display
         st.markdown("### 💬 Answer")
         st.write(summary)
 
+        # 9) Sources (if any)
         if sources:
             st.markdown("### 📚 Sources")
             for doc in sources:
-                src = doc.metadata.get("source", "unknown")
-                st.write(f"- {os.path.basename(src)}")
+                # doc could be a langchain Document or dict; be defensive
+                md = getattr(doc, "metadata", None) or getattr(doc, "__dict__", {}).get("metadata", {}) or {}
+                src = md.get("source", "unknown")
+                if isinstance(src, str) and src.lower().endswith(".pdf"):
+                    src = os.path.basename(src)
+                st.write(f"- {src}")
 
     except Exception as e:
         st.error(f"🚨 {e}")
