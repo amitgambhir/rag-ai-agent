@@ -3,6 +3,10 @@ from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.chains import RetrievalQA
+from modules import rag_ingest
+import shutil
+import gc
+import time
 
 load_dotenv()
 
@@ -84,11 +88,25 @@ class RAGQA:
 
 
 # For Streamlit UI
-def reload_vectorstore():
+def reload_vectorstore() -> tuple[bool, str]:
     try:
-        import shutil
+        # Explicitly release Chroma instance from memory
+        import modules.rag_qa as rag_module
+        rag_module_instance = getattr(rag_module, "RAGQA", None)
+
+        if rag_module_instance:
+            del rag_module_instance
+            gc.collect()
+            time.sleep(1)  # Allow filesystem to catch up
+
+        # Wipe vectorstore directory
         if os.path.exists(PERSIST_DIR):
             shutil.rmtree(PERSIST_DIR)
-        return True, "Vector store directory cleared."
+            time.sleep(1)
+
+        # Ingest fresh data
+        rag_ingest.ingest_documents()
+
+        return True, "✅ Vector store rebuilt successfully."
     except Exception as e:
-        return False, str(e)
+        return False, f"Ingestion error: {e}"

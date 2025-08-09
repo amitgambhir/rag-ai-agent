@@ -16,6 +16,7 @@ from modules.memory import ChatMemory
 from modules.planner import Planner
 from modules.fallback import fallback_answer
 from modules.rag_ingest import ingest_documents
+from modules import rag_ingest
 
 # ─── Auth Setup ───
 USERNAME = os.getenv("APP_USERNAME")
@@ -62,14 +63,21 @@ st.sidebar.header("Settings & Tools")
 
 if st.sidebar.button("🔁 Refresh Vector Store"):
     try:
-        # Step 1: Manually remove RAG instance (free up Chroma lock)
-        st.session_state.rag = None  
+        import shutil
+        import gc
+        import time
+        from modules import rag_ingest
+        from modules.config import PERSIST_DIR
+
+        # Step 1: Manually remove RAG instance and trigger GC
+        st.session_state.rag = None
+        gc.collect()
+        time.sleep(1)  # Wait for file handles to release
 
         # Step 2: Delete old vectorstore dir
-        import shutil
-        from modules.config import PERSIST_DIR
         if os.path.exists(PERSIST_DIR):
             shutil.rmtree(PERSIST_DIR)
+            time.sleep(1)  # Give filesystem time to unlock
 
         # Step 3: Run ingestion pipeline (rebuild vectorstore)
         with st.spinner("♻️ Rebuilding vector store…"):
