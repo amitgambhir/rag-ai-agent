@@ -1,15 +1,15 @@
-# AI Agent MCP
+# RAG AI AGENT
 
 ## 🔧 Project Overview
 
-AI Agent MCP is a modular and extensible framework built using LangChain, Chroma, OpenAI, and Streamlit. It supports Retrieval-Augmented Generation (RAG), agentic planning, memory, summarization, and fallback mechanisms to enable a robust end-to-end AI assistant.
+RAG AI Agent is a modular and extensible framework built using LangChain, Chroma, OpenAI, and Streamlit. It supports Retrieval-Augmented Generation (RAG), agentic planning, memory, summarization, and fallback mechanisms to enable a robust end-to-end AI assistant.
 
 ---
 
 ## 📁 Project Structure
 
 ```
-ai-agent-mcp/
+rag-ai-agent/
 ├── documents/                  # PDF documents to ingest
 ├── vectorstore/                # Chroma vector database (persisted)
 ├── modules/
@@ -130,7 +130,7 @@ CHROMA_DB_DIR=./vectorstore
 ```bash
 # 1. Clone repo
 $ git clone <repo-url>
-$ cd ai-agent-mcp
+$ cd rag-ai-agent
 
 # 2. Create virtual environment
 $ python3 -m venv venv
@@ -189,7 +189,7 @@ $ streamlit run ui/streamlit_app.py
 
 ## 🧠 Summary: Application Capabilities
 
-AI Agent MCP is a modular, hybrid AI assistant framework leveraging RAG + GPT-4 fallback to build production-grade question answering systems. Its architecture enables retrieval of enterprise content (PDFs, web pages) while still falling back on GPT for open-domain questions.
+RAG AI Agent is a modular, hybrid AI assistant framework leveraging RAG + GPT-4 fallback to build production-grade question answering systems. Its architecture enables retrieval of enterprise content (PDFs, web pages) while still falling back on GPT for open-domain questions.
 
 The app is designed with modularity in mind: each capability (summarization, planning, RAG, memory, fallback) is encapsulated in a standalone Python module. It uses Chroma for vector storage and OpenAI embeddings for document chunk indexing. The ingestion flow supports both PDF documents and web URLs, splitting them intelligently into chunks and storing them persistently.
 
