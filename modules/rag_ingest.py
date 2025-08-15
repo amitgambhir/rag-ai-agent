@@ -1,36 +1,49 @@
+# modules/rag_ingest.py
+
 import os
 import shutil
 import logging
+from typing import List, Optional
 
 from dotenv import load_dotenv
 load_dotenv()
 
-# LangChain / loaders
-from langchain_community.document_loaders import PlaywrightURLLoader, PyPDFLoader
+# LangChain loaders & vector store
+from langchain_community.document_loaders import (
+    PlaywrightURLLoader,
+    WebBaseLoader,
+    PyPDFLoader,
+)
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 
-# Project config
+# Project config (single source of truth)
 try:
-    from modules.config import PERSIST_DIR  # preferred single source of truth
+    from modules.config import PERSIST_DIR
 except Exception:
     # Fallback: vectorstore at project root if config import fails
-    PERSIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "vectorstore"))
+    PERSIST_DIR = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "vectorstore")
+    )
 
-# Logging (simple)
+# ─── Logging ───
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
 
-def _load_urls(file_path: str):
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _load_urls(file_path: str) -> List[str]:
     if not os.path.exists(file_path):
         return []
     with open(file_path, "r") as f:
-        return [line.strip() for line in f.readlines() if line.strip()]
+        return [line.strip() for line in f if line.strip()]
 
 
-def _load_pdfs(directory: str):
+def _load_pdfs(directory: str) -> List[str]:
     if not os.path.isdir(directory):
         return []
     pdfs = []
@@ -40,21 +53,65 @@ def _load_pdfs(directory: str):
     return pdfs
 
 
-def ingest_documents(force_reload: bool = True, output_dir: str | None = None) -> bool:
+def _ingest_url(url: str) -> List:
+    """
+    Try Playwright first (DOM-aware), then fallback to WebBaseLoader (requests + bs4)
+    if Playwright isn't available/blocked. Keeps logs clean across versions.
+    """
+    docs = []
+    # 1) Playwright attempt (no goto_options to keep compat across versions)
+    try:
+        pw_loader = PlaywrightURLLoader(
+            urls=[url],
+            remove_selectors=["header", "footer", "nav"],
+        )
+        docs = pw_loader.load()
+        if docs:
+            log.info(f"   ✔ (Playwright) {url} → {len(docs)} doc(s)")
+            return docs
+    except Exception as e:
+        log.warning(f"   ⚠️ Playwright failed for {url}: {e}")
+
+    # 2) Fallback: WebBaseLoader with User-Agent
+    try:
+        ua = os.getenv(
+            "USER_AGENT",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        )
+        wb_loader = WebBaseLoader(
+            url,
+            requests_kwargs={"headers": {"User-Agent": ua}},
+        )
+        docs = wb_loader.load()
+        if docs:
+            log.info(f"   ✔ (WebBaseLoader) {url} → {len(docs)} doc(s)")
+            return docs
+        else:
+            log.warning(f"   ⚠️ No content parsed from {url} via WebBaseLoader")
+    except Exception as e:
+        log.warning(f"   ❌ WebBaseLoader failed for {url}: {e}")
+
+    return []
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Public API
+# ──────────────────────────────────────────────────────────────────────────────
+
+def ingest_documents(force_reload: bool = True, output_dir: Optional[str] = None) -> bool:
     """
     Build embeddings and a Chroma vectorstore at `output_dir` (or PERSIST_DIR).
-    Returns True on success (exceptions will bubble to caller).
+    Returns True on success (exceptions bubble up to caller).
     """
-    persist_root = output_dir or PERSIST_DIR
+    persist_dir = output_dir or PERSIST_DIR
 
-    # Ensure clean & writable target directory
-    if force_reload and os.path.exists(persist_root):
-        shutil.rmtree(persist_root)
+    # Clean target if asked
+    if force_reload and os.path.exists(persist_dir):
+        shutil.rmtree(persist_dir)
 
-    os.makedirs(persist_root, exist_ok=True)
+    # Ensure target exists & is writable
+    os.makedirs(persist_dir, exist_ok=True)
     try:
-        # make sure we can write here (macOS sometimes preserves weird perms)
-        os.chmod(persist_root, 0o775)
+        os.chmod(persist_dir, 0o775)
     except Exception:
         pass
 
@@ -62,18 +119,21 @@ def ingest_documents(force_reload: bool = True, output_dir: str | None = None) -
 
     log.info("📦 Starting ingestion pipeline...")
 
-    # ── URLs
+    # ── URLs (resilient path)
     url_file = os.path.join("documents", "urls.txt")
     urls = _load_urls(url_file)
     if urls:
         log.info("🔗 Loading web documents...")
-        try:
-            loader = PlaywrightURLLoader(urls, remove_selectors=["header", "footer", "nav"])
-            docs = loader.load()
-            documents.extend(docs)
-            log.info(f"   ✔ Loaded {len(docs)} documents from URLs.")
-        except Exception as e:
-            log.warning(f"   ❌ URL ingestion warning: {e}")
+        total = 0
+        for url in urls:
+            try:
+                docs = _ingest_url(url)
+                if docs:
+                    documents.extend(docs)
+                    total += len(docs)
+            except Exception as e:
+                log.warning(f"   ❌ Error fetching or processing {url}: {e}")
+        log.info(f"   → URL ingestion complete. Loaded {total} document(s) total.")
 
     # ── PDFs
     log.info("📄 Loading PDF documents...")
@@ -98,19 +158,14 @@ def ingest_documents(force_reload: bool = True, output_dir: str | None = None) -
     log.info("🧠 Generating embeddings and building vectorstore...")
     embeddings = OpenAIEmbeddings()
 
-    vectordb = Chroma.from_documents(
+    # Chroma 0.4+ persists automatically when persist_directory is set
+    Chroma.from_documents(
         chunks,
         embedding=embeddings,
-        persist_directory=persist_root,
+        persist_directory=persist_dir,
     )
 
-    # Force persistence & drop references to release SQLite handles
-    try:
-        vectordb.persist()
-    finally:
-        del vectordb
-
-    log.info(f"💾 Vectorstore saved at: {persist_root}")
+    log.info(f"💾 Vectorstore saved at: {persist_dir}")
     log.info("✅ Ingestion completed successfully.")
     return True
 

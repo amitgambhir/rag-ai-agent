@@ -1,3 +1,5 @@
+# ui/streamlit_app.py
+
 import os
 import sys
 import time
@@ -23,6 +25,7 @@ from modules.planner import Planner
 from modules.fallback import fallback_answer
 import modules.rag_ingest as rag_ingest
 from modules.config import PERSIST_DIR
+from modules.config import OPENAI_MODEL_FALLBACK as FALLBACK_MODEL
 
 # ─── Auth ───
 USERNAME = os.getenv("APP_USERNAME")
@@ -30,6 +33,9 @@ PASSWORD = os.getenv("APP_PASSWORD")
 if not USERNAME or not PASSWORD:
     st.error("⚠️ Missing APP_USERNAME or APP_PASSWORD in .env")
     st.stop()
+
+# Fallback model label (for badge); must match what fallback.py uses
+# FALLBACK_MODEL = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-4")
 
 # ─── Page config ───
 st.set_page_config(page_title="AI Agent MCP", layout="wide")
@@ -120,51 +126,63 @@ if query:
         with st.spinner("🔎 Searching documents…"):
             answer, sources = st.session_state.rag.query(query)
 
-        # Debug (temporary): verify the type we’re about to summarize
-        # st.write(f"DEBUG: type(answer) = {type(answer)}")
+        # 4) Decide if RAG “hit” is good enough
+        rag_hit = isinstance(answer, str) and bool(answer.strip()) and bool(sources)
+        provenance = "RAG"  # default; will flip if we use GPT
 
-        # 4) Fallback (only if RAG result is empty/invalid *and* toggle is on)
-        need_fallback = (
-            not isinstance(answer, str)
-            or not answer.strip()
-            or not sources  # ← if RAG gave no source docs, treat as miss
-        )
-        if need_fallback and st.session_state.use_gpt_fallback:
-            with st.spinner("💬 No RAG hit — asking ChatGPT…"):
-                fb = fallback_answer(query)  # MUST be called
-                # Normalize fallback result to string
-                if callable(fb):
-                    answer = "[Invalid fallback result: function]"
-                elif isinstance(fb, str):
-                    answer = fb
-                else:
-                    answer = str(fb)
-                sources = [{"metadata": {"source": "💬 ChatGPT (fallback)"}}]
+        # 5) If RAG missed, optionally use GPT (based on checkbox)
+        if not rag_hit:
+            if st.session_state.use_gpt_fallback:
+                with st.spinner(f"💬 No RAG hit — asking ChatGPT ({FALLBACK_MODEL})…"):
+                    fb = fallback_answer(query)   # MUST be called
+                    # Normalize fallback result to string
+                    if callable(fb):
+                        answer = "[Invalid fallback result: function]"
+                    elif isinstance(fb, str):
+                        answer = fb
+                    else:
+                        answer = str(fb)
+                    sources = [{"metadata": {"source": f"💬 ChatGPT (fallback · {FALLBACK_MODEL})"}}]
+                    provenance = "GPT"
+            else:
+                # Fallback off → provide a helpful message and keep sources empty
+                answer = ("No relevant context found in your documents. "
+                          "Enable **GPT fallback** in the sidebar to answer using general knowledge.")
+                sources = []
+                provenance = "NONE"
 
-        # 5) Normalize answer BEFORE summarizing (prevents .strip() errors)
+        # 6) Normalize answer BEFORE summarizing
         if callable(answer):
             answer = "[Internal error: answer was a function]"
         elif not isinstance(answer, str):
             answer = str(answer)
 
-        # 6) Summarize
+        # 7) Summarize
         summary = st.session_state.summ.summarize(answer, max_tokens=length)
 
-        # 7) Track AI response
+        # 8) Track AI response
         st.session_state.mem.add_ai_message(summary)
         st.session_state.hist.append({"role": "assistant", "content": summary})
 
-        # 8) Display
+        # 9) Display with provenance badge
         st.markdown("### 💬 Answer")
+        if provenance == "RAG":
+            badge = "🧠 **RAG**"
+        elif provenance == "GPT":
+            badge = f"💬 **GPT fallback · model: {FALLBACK_MODEL}**"
+        else:
+            badge = "⚠️ **No context**"
+        st.markdown(badge)
         st.write(summary)
 
-        # 9) Sources (if any)
+        # 10) Sources (if any)
         if sources:
             st.markdown("### 📚 Sources")
             for doc in sources:
                 # doc could be a langchain Document or dict; be defensive
                 md = getattr(doc, "metadata", None) or getattr(doc, "__dict__", {}).get("metadata", {}) or {}
                 src = md.get("source", "unknown")
+                # For the fallback, we’ll show the label as-is
                 if isinstance(src, str) and src.lower().endswith(".pdf"):
                     src = os.path.basename(src)
                 st.write(f"- {src}")

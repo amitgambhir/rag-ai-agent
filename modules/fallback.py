@@ -1,26 +1,30 @@
 from langchain_openai import ChatOpenAI
+from modules.config import OPENAI_MODEL_FALLBACK, TEMP_FALLBACK
 
-# System prompt
-SYSTEM = "You are a helpful AI assistant."
+SYSTEM = "You are a helpful AI assistant. If documents are unavailable, answer using your general knowledge."
+
 PROMPT = """System: {system}
 User: {question}
 Assistant:"""
 
 class GPTFallback:
-    def __init__(self, model_name: str = "gpt-4", temperature: float = 0.0):
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature)
+    def __init__(self, model_name: str | None = None, temperature: float | None = None):
+        self.llm = ChatOpenAI(
+            model_name=model_name or OPENAI_MODEL_FALLBACK,
+            temperature=TEMP_FALLBACK if temperature is None else temperature,
+        )
 
     def answer(self, question: str) -> str:
         prompt = PROMPT.format(system=SYSTEM, question=question)
         try:
-            response = self.llm.invoke(prompt)
-            content = getattr(response, "content", None)
+            resp = self.llm.invoke(prompt)
+            content = getattr(resp, "content", None)
             if not isinstance(content, str):
                 return "[Fallback Error: Invalid response content]"
             return content.strip()
         except Exception as e:
             return f"[Fallback Error: {e}]"
 
-# Convenience method
+
 def fallback_answer(question: str) -> str:
     return GPTFallback().answer(question)
